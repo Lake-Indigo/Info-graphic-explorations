@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Car Brands in India</title>
+    <link rel="stylesheet" href="infographic_css.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
+    <style>
+        #viz-container {
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+        }
+        #india-map-bg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.15;
+            z-index: 0;
+        }
+        #bar-chart {
+            position: relative;
+            z-index: 1;
+        }
+        .tooltip {
+            position: absolute;
+            background: #fff;
+            border: 1px solid #ccc;
+            padding: 8px;
+            pointer-events: none;
+            display: none;
+            font-size: 14px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-top: 32px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Car Brands in India</h1>
+    <div id="viz-container">
+        <svg id="india-map-bg"></svg>
+        <svg id="bar-chart"></svg>
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+    <script>
+    // Placeholder data: Car sales 2023-24 (replace with real data when available)
+    const carSalesData = [
+        { brand: "Maruti", model: "Swift", segment: "Hatchback", sales: 180000 },
+        { brand: "Maruti", model: "Dzire", segment: "Sedan", sales: 120000 },
+        { brand: "Hyundai", model: "Creta", segment: "SUV", sales: 160000 },
+        { brand: "Hyundai", model: "i20", segment: "Hatchback", sales: 90000 },
+        { brand: "Tata", model: "Punch", segment: "SUV", sales: 110000 },
+        { brand: "Tata", model: "Nexon", segment: "SUV", sales: 100000 },
+        { brand: "Mahindra", model: "Scorpio", segment: "SUV", sales: 80000 },
+        { brand: "Kia", model: "Seltos", segment: "SUV", sales: 95000 },
+        { brand: "Toyota", model: "Innova", segment: "MPV", sales: 70000 },
+        { brand: "Honda", model: "City", segment: "Sedan", sales: 40000 }
+    ];
+
+    // Responsive SVG sizes
+    const width = 900, height = 600;
+    d3.select('#india-map-bg').attr('width', width).attr('height', height);
+    d3.select('#bar-chart').attr('width', width).attr('height', height);
+
+    // Draw faded India map as background
+    d3.json("https://raw.githubusercontent.com/mkiitkgp/India-map-D3/master/india-states.json").then(function(mapData) {
+        const projection = d3.geoMercator()
+            .center([80, 22])
+            .scale(1000)
+            .translate([width / 2, height / 2]);
+        const path = d3.geoPath().projection(projection);
+        const states = topojson.feature(mapData, mapData.objects.states).features;
+        const svgMap = d3.select('#india-map-bg');
+        svgMap.selectAll('path')
+            .data(states)
+            .enter().append('path')
+            .attr('d', path)
+            .attr('fill', '#888')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 0.5);
+    });
+
+    // Prepare bar chart data: group by brand, then by model
+    const brands = Array.from(new Set(carSalesData.map(d => d.brand)));
+    const models = carSalesData.map(d => d.model);
+    const x0 = d3.scaleBand()
+        .domain(brands)
+        .range([100, width - 100])
+        .paddingInner(0.2);
+    const x1 = d3.scaleBand()
+        .domain(models)
+        .range([0, x0.bandwidth()])
+        .padding(0.1);
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(carSalesData, d => d.sales) * 1.1])
+        .range([height - 100, 100]);
+    const color = d3.scaleOrdinal()
+        .domain(models)
+        .range(d3.schemeSet2);
+
+    // Draw bar chart
+    const svgBar = d3.select('#bar-chart');
+    svgBar.append('g')
+        .attr('transform', `translate(0,${height - 100})`)
+        .call(d3.axisBottom(x0));
+    svgBar.append('g')
+        .attr('transform', `translate(100,0)`)
+        .call(d3.axisLeft(y));
+
+    // Tooltip
+    const tooltip = d3.select('#tooltip');
+
+    // Draw bars
+    svgBar.selectAll('g.brand')
+        .data(brands)
+        .enter().append('g')
+        .attr('class', 'brand')
+        .attr('transform', d => `translate(${x0(d)},0)`)
+        .selectAll('rect')
+        .data(brand => carSalesData.filter(d => d.brand === brand))
+        .enter().append('rect')
+        .attr('x', d => x1(d.model))
+        .attr('y', d => y(d.sales))
+        .attr('width', x1.bandwidth())
+        .attr('height', d => y(0) - y(d.sales))
+        .attr('fill', d => color(d.model))
+        .on('mouseover', function(event, d) {
+            tooltip.style('display', 'block')
+                .html(`<strong>${d.brand} - ${d.model}</strong><br>Segment: ${d.segment}<br>Sales: ${d.sales.toLocaleString()}`)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 40) + 'px');
+            d3.select(this).attr('fill', d3.rgb(color(d.model)).darker(1));
+        })
+        .on('mousemove', function(event) {
+            tooltip.style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 40) + 'px');
+        })
+        .on('mouseout', function(event, d) {
+            tooltip.style('display', 'none');
+            d3.select(this).attr('fill', color(d.model));
+        });
+
+    // Add legend
+    const legend = svgBar.append('g')
+        .attr('transform', `translate(${width - 200}, 120)`);
+    models.forEach((model, i) => {
+        legend.append('rect')
+            .attr('x', 0)
+            .attr('y', i * 22)
+            .attr('width', 18)
+            .attr('height', 18)
+            .attr('fill', color(model));
+        legend.append('text')
+            .attr('x', 26)
+            .attr('y', i * 22 + 14)
+            .text(model)
+            .style('font-size', '14px');
+    });
+    </script>
+</body>
+</html>
